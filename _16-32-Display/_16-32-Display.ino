@@ -156,7 +156,6 @@ void loop() {
     state = -2;
     preset();
   }*/
-  Serial.println("IMA LOOP!");
   if(state == SETUP) {
     preset();
   }

@@ -22,8 +22,8 @@ int nextData = 0;
 int state = 0;
 char indicator = 0b00000000;
 int fail = 0;
-bool redI = false;
-bool greenI = false;
+int redI = 0;
+int greenI = 0;
 void setup() 
 {
   Wire.begin(14);  
@@ -54,8 +54,8 @@ void receiveEvent(int howMany) {
       Wire.flush();
       nextData = 0;
       indicator = c;
-      redI = (0x10000000 & indicator) == (0x10000000);
-      greenI = (0x01000000 & indicator) == (0x01000000);
+      redI = (0x10000000 & indicator) == (0x10000000)? 1 : 0;
+      greenI = (0x01000000 & indicator) == (0x01000000) ? 1 : 0;
       Serial.print("Indicator is: ");
       Serial.println((int) c);
     }
@@ -168,16 +168,29 @@ void loop()
  
  
 void input() { //Function for allowing user input and checking input against the generated array
-  int translatedOrder[4] = {2,3,4,5}; //R Y G B
-  if(redL && !greenL) {
-    translatedOrder = [5,4,2,3];
+  int translatedOrder[4] = {0}; //R Y G B
+  if(redI && !greenI) {
+    //translatedOrder = {5,4,2,3};
+    translatedOrder[0] = 5;
+    translatedOrder[1] = 4;
+    translatedOrder[2] = 2;
+    translatedOrder[3] = 3;
   }
-  else if(!redL && !greenL) {
-    translatedOrder = [4,2,3,5];
+  else if(!redI && greenI) {
+    //translatedOrder = {4,2,3,5};
+    translatedOrder[0] = 4;
+    translatedOrder[1] = 2;
+    translatedOrder[2] = 3;
+    translatedOrder[3] = 5;
   }
   else {
-    translatedOrder = [3,4,5,2];
+    //translatedOrder = {3,4,5,2};
+    translatedOrder[0] = 3;
+    translatedOrder[1] = 4;
+    translatedOrder[2] = 5;
+    translatedOrder[3] = 2;
   }
+  
   for (int x=0; x <= turn;)
   { //Statement controlled by turn count
 
