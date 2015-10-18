@@ -6,25 +6,31 @@ Code trimmed and sound effects added by digimike
 Buttons are to be set on there designated pins without pull down resistors
 and connected to ground rather then +5. 
 */
-#include <Tone.h>
-Tone speakerpin;
-int starttune[] = {NOTE_C4, NOTE_F4, NOTE_C4, NOTE_F4, NOTE_C4, NOTE_F4, NOTE_C4, NOTE_F4, NOTE_G4, NOTE_F4, NOTE_E4, NOTE_F4, NOTE_G4};
-int duration2[] = {100, 200, 100, 200, 100, 400, 100, 100, 100, 100, 200, 100, 500};
-int note[] = {NOTE_C4, NOTE_C4, NOTE_G4, NOTE_C5, NOTE_G4, NOTE_C5};
-int duration[] = {100, 100, 100, 300, 100, 300};
-int button[] = {9, 10, 11, 12}; //The four button input pins
-int ledpin[] = {2, 3, 4, 5};  // LED pins
+#include <Wire.h>
+
+#define START 1
+#define SETUP -1
+#define STANDBY 0
+
+int button[] = {2,3,4,5}; //The four button input pins
+int ledpin[] = {8,9,10,11};  // LED pins
 int turn = 0;  // turn counter
 int buttonstate = 0;  // button state checker
-int randomArray[100]; //Intentionally long to store up to 100 inputs (doubtful anyone will get this far)
-int inputArray[100];  
-
-
+int randomArray[4]; //Intentionally long to store up to 100 inputs (doubtful anyone will get this far)
+int inputArray[4];  
+int nextData = 0;
+int state = 0;
+char indicator = 0b00000000;
+int fail = 0;
+bool redI = false;
+bool greenI = false;
 void setup() 
 {
+  Wire.begin(14);  
   Serial.begin(9600);
-  speakerpin.begin(12); // speaker is on pin 12
-
+  Wire.onReceive(receiveEvent); // register event
+  while (!Serial);
+  Serial.println("Simon Says"); 
   for(int x=0; x<4; x++)  // LED pins are outputs
   {
     pinMode(ledpin[x], OUTPUT);
@@ -37,124 +43,141 @@ void setup()
   }
 
   randomSeed(analogRead(0)); //Added to generate "more randomness" with the randomArray for the output function
-  for (int thisNote = 0; thisNote < 13; thisNote ++) {
-     // play the next note:
-     speakerpin.play(starttune[thisNote]);
-     // hold the note:
-     if (thisNote==0 || thisNote==2 || thisNote==4 || thisNote== 6)
-     {
-       digitalWrite(ledpin[0], HIGH);
-     }
-     if (thisNote==1 || thisNote==3 || thisNote==5 || thisNote== 7 || thisNote==9 || thisNote==11)
-     {
-       digitalWrite(ledpin[1], HIGH);
-     }
-     if (thisNote==8 || thisNote==12)
-     {
-       digitalWrite(ledpin[2], HIGH);
-     }  
-     if (thisNote==10)
-     {   
-       digitalWrite(ledpin[3], HIGH);
-     }
-     delay(duration2[thisNote]);
-     // stop for the next note:
-     speakerpin.stop();
-     digitalWrite(ledpin[0], LOW);
-     digitalWrite(ledpin[1], LOW);
-     digitalWrite(ledpin[2], LOW);
-     digitalWrite(ledpin[3], LOW);
-     delay(25);
-    }
-  delay(1000);
+  //start(); //REMOVE TO ACTUALLY HAVE IT WORK
 }
- 
-void loop() 
-{   
-  for (int y=0; y<=99; y++)
-  {
-    //function for generating the array to be matched by the player
-    digitalWrite(ledpin[0], HIGH);
-    digitalWrite(ledpin[1], HIGH);
-    digitalWrite(ledpin[2], HIGH);
-    digitalWrite(ledpin[3], HIGH);
-  
-    for (int thisNote = 0; thisNote < 6; thisNote ++) {
-     // play the next note:
-     speakerpin.play(note[thisNote]);
-     // hold the note:
-     delay(duration[thisNote]);
-     // stop for the next note:
-     speakerpin.stop();
-     delay(25);
+
+void receiveEvent(int howMany) {
+  Serial.println("Recieved Event");
+  while (0 < Wire.available()) { // loop through all but the last
+    char c = Wire.read(); // receive byte as a character
+    if(nextData == 1) {
+      Wire.flush();
+      nextData = 0;
+      indicator = c;
+      redI = (0x10000000 & indicator) == (0x10000000);
+      greenI = (0x01000000 & indicator) == (0x01000000);
+      Serial.print("Indicator is: ");
+      Serial.println((int) c);
     }
+    else if(c == 0x02) {
+      state = START;
+    }
+    else if (c == 0x01) {
+      state = SETUP;
+      nextData = 1;
+    }
+    else if (c == 0x03) {
+      state = STANDBY;
+    }
+    Serial.println(state);
+  }
+}
+
+void preset() {
+  while(state != START) {
+    delay(1);
+  }
+  int result = start();
+  if(result == -1) {
+    Wire.beginTransmission(4); 
+    Wire.write('L');  
+    Wire.endTransmission(); 
+  }
+  else if (result == 1){
+    Wire.beginTransmission(4); 
+    Wire.write('W');  
+    Wire.endTransmission(); 
+  } 
+}
+
+int start() {
+  for (int y = 0; y < 4; y++)
+    {
+       
+      digitalWrite(ledpin[0], LOW);
+      digitalWrite(ledpin[1], LOW);
+      digitalWrite(ledpin[2], LOW);
+      digitalWrite(ledpin[3], LOW);
+      delay(1000);
     
-    digitalWrite(ledpin[0], LOW);
-    digitalWrite(ledpin[1], LOW);
-    digitalWrite(ledpin[2], LOW);
-    digitalWrite(ledpin[3], LOW);
-    delay(1000);
-  
-    for (int y=turn; y <= turn; y++)
-    { //Limited by the turn variable
-      Serial.println(""); //Some serial output to follow along
-      Serial.print("Turn: ");
-      Serial.print(y);
-      Serial.println("");
-      randomArray[y] = random(1, 5); //Assigning a random number (1-4) to the randomArray[y], y being the turn count
-      for (int x=0; x <= turn; x++)
-      {
-        Serial.print(randomArray[x]);
-      
-        for(int y=0; y<4; y++)
+      for (int y=turn; y <= turn; y++)
+      { //Limited by the turn variable
+        Serial.println(""); //Some serial output to follow along
+        Serial.print("Turn: ");
+        Serial.print(y);
+        Serial.println("");
+        randomArray[y] = random(1, 5); //Assigning a random number (1-4) to the randomArray[y], y being the turn count
+        for (int x=0; x <= turn; x++)
         {
-      
-          if (randomArray[x] == 1 && ledpin[y] == 8) 
-          {  //if statements to display the stored values in the array
-            digitalWrite(ledpin[y], HIGH);
-            speakerpin.play(NOTE_G3, 100);
-            delay(400);
-            digitalWrite(ledpin[y], LOW);
-            delay(100);
-          }
-
-          if (randomArray[x] == 2 && ledpin[y] == 9) 
+          Serial.print(randomArray[x]);
+        
+          for(int y=0; y<4; y++)
           {
-            digitalWrite(ledpin[y], HIGH);
-            speakerpin.play(NOTE_A3, 100);
-            delay(400);
-            digitalWrite(ledpin[y], LOW);
-            delay(100);
-          }
+        
+            if (randomArray[x] == 1 && ledpin[y] == 8) 
+            {  //if statements to display the stored values in the array
+              digitalWrite(ledpin[y], HIGH);
+              delay(400);
+              digitalWrite(ledpin[y], LOW);
+              delay(100);
+            }
   
-          if (randomArray[x] == 3 && ledpin[y] == 10) 
-          {
-            digitalWrite(ledpin[y], HIGH);
-            speakerpin.play(NOTE_B3, 100);
-            delay(400);
-            digitalWrite(ledpin[y], LOW);
-            delay(100);
-          }
-
-          if (randomArray[x] == 4 && ledpin[y] == 11) 
-          {
-            digitalWrite(ledpin[y], HIGH);
-            speakerpin.play(NOTE_C4, 100);
-            delay(400);
-            digitalWrite(ledpin[y], LOW);
-            delay(100);
+            if (randomArray[x] == 2 && ledpin[y] == 9) 
+            {
+              digitalWrite(ledpin[y], HIGH);
+              delay(400);
+              digitalWrite(ledpin[y], LOW);
+              delay(100);
+            }
+    
+            if (randomArray[x] == 3 && ledpin[y] == 10) 
+            {
+              digitalWrite(ledpin[y], HIGH);
+              delay(400);
+              digitalWrite(ledpin[y], LOW);
+              delay(100);
+            }
+  
+            if (randomArray[x] == 4 && ledpin[y] == 11) 
+            {
+              digitalWrite(ledpin[y], HIGH);
+              delay(400);
+              digitalWrite(ledpin[y], LOW);
+              delay(100);
+            }
           }
         }
       }
-    }
-    input();
-  }
+      input();
+      if(fail == 1) {
+        fail = 0;
+        turn = 0;
+        return -1;
+      }
+    }  
+   return 1;
+}
+
+void loop() 
+{   
+  if(state == SETUP) {
+    preset();
+  }  
 }
  
  
  
 void input() { //Function for allowing user input and checking input against the generated array
-
+  int translatedOrder[4] = {2,3,4,5}; //R Y G B
+  if(redL && !greenL) {
+    translatedOrder = [5,4,2,3];
+  }
+  else if(!redL && !greenL) {
+    translatedOrder = [4,2,3,5];
+  }
+  else {
+    translatedOrder = [3,4,5,2];
+  }
   for (int x=0; x <= turn;)
   { //Statement controlled by turn count
 
@@ -162,11 +185,10 @@ void input() { //Function for allowing user input and checking input against the
     {
       
       buttonstate = digitalRead(button[y]);
-    
-      if (buttonstate == LOW && button[y] == 2)
+      
+      if (buttonstate == LOW && button[y] == translatedOrder[y])
       { //Checking for button push
         digitalWrite(ledpin[0], HIGH);
-        speakerpin.play(NOTE_G3, 100);
         delay(200);
         digitalWrite(ledpin[0], LOW);
         inputArray[x] = 1;
@@ -174,14 +196,14 @@ void input() { //Function for allowing user input and checking input against the
         Serial.print(" ");
         Serial.print(1);
         if (inputArray[x] != randomArray[x]) { //Checks value input by user and checks it against
-          fail();                              //the value in the same spot on the generated array
+          fail = 1;
+          return;//the value in the same spot on the generated array
         }                                      //The fail function is called if it does not match
         x++;
       }
-       if (buttonstate == LOW && button[y] == 3)
+       if (buttonstate == LOW && button[y] == translatedOrder[y])
       {
         digitalWrite(ledpin[1], HIGH);
-        speakerpin.play(NOTE_A3, 100);
         delay(200);
         digitalWrite(ledpin[1], LOW);
         inputArray[x] = 2;
@@ -189,15 +211,15 @@ void input() { //Function for allowing user input and checking input against the
         Serial.print(" ");
         Serial.print(2);
         if (inputArray[x] != randomArray[x]) {
-          fail();
+          fail = 1;
+          return;
         }
         x++;
       }
 
-      if (buttonstate == LOW && button[y] == 4)
+      if (buttonstate == LOW && button[y] == translatedOrder[y])
       {
         digitalWrite(ledpin[2], HIGH);
-        speakerpin.play(NOTE_B3, 100);
         delay(200);
         digitalWrite(ledpin[2], LOW);
         inputArray[x] = 3;
@@ -205,15 +227,15 @@ void input() { //Function for allowing user input and checking input against the
         Serial.print(" ");
         Serial.print(3);
         if (inputArray[x] != randomArray[x]) {
-          fail();
+          fail = 1;
+          return;
         }
         x++;
       }
 
-      if (buttonstate == LOW && button[y] == 5)
+      if (buttonstate == LOW && button[y] == translatedOrder[y])
       {
         digitalWrite(ledpin[3], HIGH);
-        speakerpin.play(NOTE_C4, 100);
         delay(200);
         digitalWrite(ledpin[3], LOW);
         inputArray[x] = 4;
@@ -222,7 +244,8 @@ void input() { //Function for allowing user input and checking input against the
         Serial.print(4);
         if (inputArray[x] != randomArray[x]) 
         {
-          fail();
+          fail = 1;
+          return;
         }
         x++;
       }
@@ -232,26 +255,6 @@ void input() { //Function for allowing user input and checking input against the
   turn++; //Increments the turn count, also the last action before starting the output function over again
 }
 
-void fail() { //Function used if the player fails to match the sequence
- 
-  for (int y=0; y<=2; y++)
-  { //Flashes lights for failure
-    
-    digitalWrite(ledpin[0], HIGH);
-    digitalWrite(ledpin[1], HIGH);
-    digitalWrite(ledpin[2], HIGH);
-    digitalWrite(ledpin[3], HIGH);
-    speakerpin.play(NOTE_G3, 300);
-    delay(200);
-    digitalWrite(ledpin[0], LOW);
-    digitalWrite(ledpin[1], LOW);
-    digitalWrite(ledpin[2], LOW);
-    digitalWrite(ledpin[3], LOW);
-    speakerpin.play(NOTE_C3, 300);
-    delay(200);
-  }
-  delay(500);
-  turn = -1; //Resets turn value so the game starts over without need for a reset button
-}
+
 
 
