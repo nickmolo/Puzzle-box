@@ -1,3 +1,6 @@
+
+#include <Wire.h>
+
 #define L1 12
 #define L2 11
 #define L3 10
@@ -17,7 +20,16 @@ int state4 =0;
 
 int tock=0;
 
+#define START 1
+#define SETUP -1
+#define STANDBY 0
+
+int state = 0;
+int incoming = 0;
+int nextData = 0;
+
 void setup() {
+  Wire.begin(15);    
   // put your setup code here, to run once:
   pinMode(L1, OUTPUT);
   pinMode(L2, OUTPUT);
@@ -29,7 +41,7 @@ void setup() {
   pinMode(S2, INPUT);
   pinMode(S3, INPUT);
   pinMode(S4, INPUT);
-
+  Wire.onReceive(receiveEvent);
   randomSeed(analogRead(0));
 
   state1 = random(0,2);
@@ -40,10 +52,47 @@ void setup() {
 
 }
 
-void loop() {
+void receiveEvent(int howMany) {
+  Serial.println("Recieved Event");
+  while (0 < Wire.available()) { // loop through all but the last
+    char c = Wire.read(); // receive byte as a character
+    if(nextData == 1) {
+      Wire.flush();
+      nextData = 0;
+      Serial.println((int) c);
+    }
+    else if(c == 0x02) {
+      state = START;
+    }
+    else if (c == 0x01) {
+      state = SETUP;
+    }
+    else if (c == 0x03) {
+      state = STANDBY;
+    }
+    Serial.println(state);
+  }
 
- // digitalWrite(L1, 1);
+}
 
+void preset() {
+  while(state != START) {
+      delay(1);
+  }
+  while(state == START) {
+    int result = start();
+    if(result == -1) {
+      state = STANDBY;
+      Wire.beginTransmission(4); 
+      Wire.write('L');  
+      Wire.endTransmission(); 
+      return;
+    }    
+  }
+
+}
+
+int start() {
   digitalWrite(L1, state1);
   digitalWrite(L2, state2);
   digitalWrite(L3, state3);
@@ -53,7 +102,7 @@ void loop() {
 
   count++;
   
-  if(count == 100){
+  if(count == 300){
     if(tock){
       tock =0;
     }else{
@@ -63,6 +112,7 @@ void loop() {
         digitalWrite(L5, HIGH);
       }else{
         digitalWrite(L5, LOW);
+        return -1;
       }
 
       
@@ -71,6 +121,15 @@ void loop() {
       state3 = random(0,2);
       state4 = random(0,2);
     }
+  }  
+}
+
+void loop() {
+  if(state == SETUP) {
+    preset();
   }
+ // digitalWrite(L1, 1);
+
+
     
 }
